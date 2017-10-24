@@ -101,9 +101,11 @@ class WorkerMonitor
         }
         $check_interval = isset($this->config['check_interval'])?$this->config['check_interval']:DEFAULT_CHECK_INTERVAL;
 
-        if($memory > $memory_limit
-            || $this->totalReactionNum > $reaction_limit || $this->totalMsgNum > $msgLimit
-            || ($this->cpuInfo['limit_count']*$check_interval >= 60000 && $this->cpuInfo['limit_count'] >= 3)){
+        if($this->cpuInfo['limit_count']*$check_interval >= 60000 && $this->cpuInfo['limit_count'] >= 3){
+            sys_echo("worker restart caused by CPU_LIMIT");
+            $this->closePre();
+        }
+        elseif($memory > $memory_limit || $this->totalReactionNum > $reaction_limit || $this->totalMsgNum > $msgLimit){
             $this->closePre();
         }
     }
