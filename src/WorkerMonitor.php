@@ -92,7 +92,7 @@ class WorkerMonitor
 
         $cpuUsage = $this->cpu_get_usage();
         //$cpuLimit = isset($this->config['cpu_limit']) ? $this->config['cpu_limit'] : 80;
-        $cpuLimit = 95; //todo 暂时设定为95，设置的cpu_limit未生效
+        $cpuLimit = 90; //todo 暂时设定为90，设置的cpu_limit未生效
         if($cpuUsage > $cpuLimit){
             $this->cpuInfo['limit_count']++;
         }
@@ -247,7 +247,7 @@ class WorkerMonitor
             $stealstolen = $sysCpuArray[9];
             $guest = $sysCpuArray[10];
             $totalCpuTime = $user + $nice + $system + $idle + $iowait + $irq + $softirq + $stealstolen + $guest;
-            
+
             $utime = $pidCpuArray[13];
             $stime = $pidCpuArray[14];
             $cutime = $pidCpuArray[15];
