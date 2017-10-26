@@ -64,7 +64,7 @@ class WorkerMonitor
 
     public function restart()
     {
-        $time = isset($this->config['max_live_time'])?$this->config['max_live_time']:DEFAULT_LIVE_TIME;
+        $time = isset($this->config['max_live_time'])?$this->config['max_live_time']:self::DEFAULT_LIVE_TIME;
         $time += $this->workerId * self::GAP_TIME;
 
         Timer::after($time, [$this,'closePre'], $this->classHash.'_restart');
@@ -72,7 +72,7 @@ class WorkerMonitor
 
     public function checkStart()
     {
-        $time = isset($this->config['check_interval'])?$this->config['check_interval']:DEFAULT_CHECK_INTERVAL;
+        $time = isset($this->config['check_interval'])?$this->config['check_interval']:self::DEFAULT_CHECK_INTERVAL;
 
         Timer::tick($time, [$this,'check'], $this->classHash.'_check');
     }
@@ -99,7 +99,7 @@ class WorkerMonitor
         else{
             $this->cpuInfo['limit_count'] = 0;
         }
-        $check_interval = isset($this->config['check_interval'])?$this->config['check_interval']:DEFAULT_CHECK_INTERVAL;
+        $check_interval = isset($this->config['check_interval'])?$this->config['check_interval']:self::DEFAULT_CHECK_INTERVAL;
 
         if($this->cpuInfo['limit_count']*$check_interval >= 60000 && $this->cpuInfo['limit_count'] >= 3){
             sys_echo("worker restart caused by CPU_LIMIT");
