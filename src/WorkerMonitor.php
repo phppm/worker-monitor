@@ -7,6 +7,7 @@ use ZanPHP\Hawk\Constant;
 use ZanPHP\Hawk\Hawk;
 use ZanPHP\Support\Singleton;
 use ZanPHP\Timer\Timer;
+use ZanPHP\Cache\APCuStore;
 
 
 class WorkerMonitor
@@ -37,6 +38,8 @@ class WorkerMonitor
 
     private $isDenyRequest;
 
+    private $workerStore;
+
     public function init($server,$config)
     {
         if(!is_array($config)){
@@ -56,8 +59,10 @@ class WorkerMonitor
             'pre_total_process_cpu_time' => 0,
             'limit_count' => 0
         );
+        $this->workerStore = new APCuStore("worker");
         $this->restart();
         $this->checkStart();
+
         //add by chiyou
         $this->hawk();
     }
@@ -75,6 +80,9 @@ class WorkerMonitor
         $time = isset($this->config['check_interval'])?$this->config['check_interval']:self::DEFAULT_CHECK_INTERVAL;
 
         Timer::tick($time, [$this,'check'], $this->classHash.'_check');
+        if($this->config['worker_num'] > 1){
+            Timer::tick(1000, [$this,'checkCpu'], $this->classHash.'_check_cpu');//间隔1s
+        }
     }
 
     public function check()
@@ -89,25 +97,37 @@ class WorkerMonitor
 
         $msgLimit = isset($this->config['msg_limit']) ? $this->config['msg_limit'] : 100000;
         $msgLimit = $msgLimit + $this->workerId * self::GAP_MSG_NUM;
-
-        $cpuUsage = $this->cpu_get_usage();
-        //$cpuLimit = isset($this->config['cpu_limit']) ? $this->config['cpu_limit'] : 80;
-        $cpuLimit = 90; //todo 暂时设定为90，设置的cpu_limit未生效
-        if($cpuUsage > $cpuLimit){
-            $this->cpuInfo['limit_count']++;
-        }
-        else{
-            $this->cpuInfo['limit_count'] = 0;
-        }
-        $check_interval = isset($this->config['check_interval'])?$this->config['check_interval']:self::DEFAULT_CHECK_INTERVAL;
-
-        if($this->cpuInfo['limit_count']*$check_interval >= 60000 && $this->cpuInfo['limit_count'] >= 3){
-            sys_echo("worker restart caused by CPU_LIMIT");
+        if($memory > $memory_limit || $this->totalReactionNum > $reaction_limit || $this->totalMsgNum > $msgLimit){
             $this->closePre();
         }
-        elseif($memory > $memory_limit || $this->totalReactionNum > $reaction_limit || $this->totalMsgNum > $msgLimit){
-            $this->closePre();
+    }
+
+    public function checkCpu()
+    {
+        $checkWorkerId = ($this->workerId + 1)%$this->config['worker_num'];
+        $checkWorkerIdPid = $this->workerStore->get($checkWorkerId);
+        if($checkWorkerIdPid){
+            $cpuUsage = $this->cpu_get_usage($checkWorkerIdPid);
+            //$cpuLimit = isset($this->config['cpu_limit']) ? $this->config['cpu_limit'] : 80;
+            $cpuLimit = 95;
+            if($cpuUsage > $cpuLimit){
+                $this->cpuInfo['limit_count']++;
+            }
+            else{
+                $this->cpuInfo['limit_count'] = 0;
+            }
+
+            if($this->cpuInfo['limit_count'] >= 10){
+                sys_echo("worker $checkWorkerId  restart caused by CPU_LIMIT");
+                $this->killWorker($checkWorkerIdPid);
+            }
         }
+
+    }
+
+    public function killWorker($pid)
+    {
+        posix_kill($pid, SIGKILL);
     }
 
     public function closePre()
@@ -115,6 +135,7 @@ class WorkerMonitor
         $this->output('ClosePre');
 
         Timer::clearTickJob($this->classHash.'_check');
+        Timer::clearTickJob($this->classHash.'_check_cpu');
 
         // TODO: 兼容zan接口修改, 全部迁移到连接池版本swoole后移除
         /* @var $this->server Server */
@@ -171,7 +192,7 @@ class WorkerMonitor
         $hawk = Hawk::getInstance();
         $memory =  memory_get_usage();
         $hawk->add(Constant::BIZ_WORKER_MEMORY,
-                    ['used' => $memory]);
+            ['used' => $memory]);
     }
 
     public function reactionReceive()
@@ -230,8 +251,7 @@ class WorkerMonitor
      * 获取对应pid的cpu占用率，暂时只支持linux环境
      * @return float
      */
-    private function cpu_get_usage(){
-        $workPid =  posix_getpid();
+    private function cpu_get_usage($workPid){
         if(file_exists('/proc/stat') && file_exists('/proc/'.$workPid.'/stat')){
             $sysCpuStr = file_get_contents('/proc/stat');
             $pidCpuStr = file_get_contents('/proc/'.$workPid.'/stat');
