@@ -80,9 +80,7 @@ class WorkerMonitor
         $time = isset($this->config['check_interval'])?$this->config['check_interval']:self::DEFAULT_CHECK_INTERVAL;
 
         Timer::tick($time, [$this,'check'], $this->classHash.'_check');
-        if($this->config['worker_num'] > 1){
-            Timer::tick(1000, [$this,'checkCpu'], $this->classHash.'_check_cpu');//间隔1s
-        }
+        Timer::tick(1000, [$this,'checkCpu'], $this->classHash.'_check_cpu');//间隔1s
     }
 
     public function check()
