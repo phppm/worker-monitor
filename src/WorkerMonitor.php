@@ -106,6 +106,7 @@ class WorkerMonitor
         $checkWorkerIdPid = $this->workerStore->get($checkWorkerId);
         if($checkWorkerIdPid){
             $cpuUsage = $this->cpu_get_usage($checkWorkerIdPid);
+            //sys_echo("$checkWorkerId cpu : $cpuUsage");
             //$cpuLimit = isset($this->config['cpu_limit']) ? $this->config['cpu_limit'] : 80;
             $cpuLimit = 95;
             if($cpuUsage > $cpuLimit){
@@ -250,41 +251,46 @@ class WorkerMonitor
      * @return float
      */
     private function cpu_get_usage($workPid){
+        $cpuUsage = 0.0;
         if(file_exists('/proc/stat') && file_exists('/proc/'.$workPid.'/stat')){
-            $sysCpuStr = file_get_contents('/proc/stat');
-            $pidCpuStr = file_get_contents('/proc/'.$workPid.'/stat');
-            $sysCpuStr1 = explode(PHP_EOL,$sysCpuStr);
-            $sysCpuArray = explode(' ',$sysCpuStr1[0]);
-            $pidCpuArray = explode(' ',$pidCpuStr);
+            try {
+                $sysCpuFile = new \SplFileObject('/proc/stat');
+                $pidCpuFile = new \SplFileObject('/proc/'.$workPid.'/stat');
 
-            $user = $sysCpuArray[2];
-            $nice = $sysCpuArray[3];
-            $system = $sysCpuArray[4];
-            $idle = $sysCpuArray[5];
-            $iowait = $sysCpuArray[6];
-            $irq = $sysCpuArray[7];
-            $softirq = $sysCpuArray[8];
-            $stealstolen = $sysCpuArray[9];
-            $guest = $sysCpuArray[10];
-            $totalCpuTime = $user + $nice + $system + $idle + $iowait + $irq + $softirq + $stealstolen + $guest;
+                $sysCpuStr = $sysCpuFile->current();
+                $pidCpuStr = $pidCpuFile->current();
+                if($sysCpuStr != '' && $pidCpuStr != ''){
+                    $sysCpuArray = explode(' ',$sysCpuStr);
+                    $pidCpuArray = explode(' ',$pidCpuStr);
 
-            $utime = $pidCpuArray[13];
-            $stime = $pidCpuArray[14];
-            $cutime = $pidCpuArray[15];
-            $cstime = $pidCpuArray[16];
-            $totalProcessCpuTime = $utime + $stime + $cutime + $cstime;
+                    $user = intval($sysCpuArray[2]);
+                    $nice = intval($sysCpuArray[3]);
+                    $system = intval($sysCpuArray[4]);
+                    $idle = intval($sysCpuArray[5]);
+                    $iowait = intval($sysCpuArray[6]);
+                    $irq = intval($sysCpuArray[7]);
+                    $softirq = intval($sysCpuArray[8]);
+                    $stealstolen = intval($sysCpuArray[9]);
+                    $guest = intval($sysCpuArray[10]);
+                    $totalCpuTime = $user + $nice + $system + $idle + $iowait + $irq + $softirq + $stealstolen + $guest;
 
-            $cpuUsage = 0;
-            if($this->cpuInfo['pre_total_cpu_time'] != 0){
-                $cpuTime = $totalCpuTime- $this->cpuInfo['pre_total_cpu_time'];
-                $processCpuTime = $totalProcessCpuTime - $this->cpuInfo['pre_total_process_cpu_time'];
-                $cpuUsage = round($processCpuTime/$cpuTime * 100 * swoole_cpu_num(),1);
+                    $utime = intval($pidCpuArray[13]);
+                    $stime = intval($pidCpuArray[14]);
+                    $cutime = intval($pidCpuArray[15]);
+                    $cstime = intval($pidCpuArray[16]);
+                    $totalProcessCpuTime = $utime + $stime + $cutime + $cstime;
+
+                    if($this->cpuInfo['pre_total_cpu_time'] != 0){
+                        $cpuTime = $totalCpuTime- $this->cpuInfo['pre_total_cpu_time'];
+                        $processCpuTime = $totalProcessCpuTime - $this->cpuInfo['pre_total_process_cpu_time'];
+                        $cpuUsage = round($processCpuTime/$cpuTime * 100 * swoole_cpu_num(),1);
+                    }
+                    $this->cpuInfo['pre_total_cpu_time'] = $totalCpuTime;
+                    $this->cpuInfo['pre_total_process_cpu_time'] = $totalProcessCpuTime;
+                }
             }
-            $this->cpuInfo['pre_total_cpu_time'] = $totalCpuTime;
-            $this->cpuInfo['pre_total_process_cpu_time'] = $totalProcessCpuTime;
-        }
-        else{
-            $cpuUsage = 0.0;
+            catch(\Throwable $t) {}
+            catch (\Exception $e) {}
         }
         return $cpuUsage;
     }
